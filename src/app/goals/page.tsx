@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getGoals, saveGoal, deleteGoal, getSubTasks, saveSubTask } from "@/lib/db";
+import { getGoals, saveGoal, deleteGoal, getSubTasks, saveSubTask, StorageError } from "@/lib/db";
 import { Goal, SubTask } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 import {
@@ -12,7 +12,7 @@ import {
   X,
   ChevronDown,
 } from "lucide-react";
-import { Card, Button, Input, Textarea, Select, Badge } from "@/components/ui";
+import { Card, Button, Input, Textarea, Select, Badge, ErrorBanner } from "@/components/ui";
 
 export default function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -23,7 +23,9 @@ export default function GoalsPage() {
   const [description, setDescription] = useState("");
   const [deadline, setDeadline] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
+  const [subTaskTitle, setSubTaskTitle] = useState("");
   const [expandedGoal, setExpandedGoal] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setGoals(getGoals());
@@ -52,14 +54,19 @@ export default function GoalsPage() {
       description: description.trim(),
       deadline,
       priority,
-      status: "not_started",
+      status: editingGoal?.status || "not_started",
       progress: editingGoal?.progress || 0,
       createdAt: editingGoal?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    saveGoal(goal);
-    resetForm();
-    setGoals(getGoals());
+    try {
+      saveGoal(goal);
+      resetForm();
+      setGoals(getGoals());
+      setError("");
+    } catch (e) {
+      setError(e instanceof StorageError ? e.message : "Could not save goal.");
+    }
   };
 
   const handleEdit = (goal: Goal) => {
@@ -72,27 +79,29 @@ export default function GoalsPage() {
   };
 
   const toggleGoalStatus = (goal: Goal) => {
-    const next = goal.status === "completed" ? "not_started" : goal.status === "in_progress" ? "completed" : "in_progress";
-    const progress = next === "completed" ? 100 : goal.status === "not_started" ? 0 : goal.progress;
+    const next = goal.status === "completed" ? "in_progress" : goal.status === "in_progress" ? "completed" : "in_progress";
+    const allForGoal = getSubTasks().filter((s) => s.goalId === goal.id);
+    const completed = allForGoal.filter((s) => s.completed).length;
+    const subtaskProgress = allForGoal.length > 0 ? Math.round((completed / allForGoal.length) * 100) : 0;
+    const progress = next === "completed" ? 100 : next === "in_progress" ? Math.max(goal.progress, subtaskProgress) : 0;
     saveGoal({ ...goal, status: next, progress });
     setGoals(getGoals());
   };
 
   const addSubTask = () => {
-    if (!expandedGoal || !title.trim()) return;
+    if (!expandedGoal || !subTaskTitle.trim()) return;
     const allSubTasks = getSubTasks();
     const maxOrder = allSubTasks.filter((s) => s.goalId === expandedGoal).reduce((max, s) => Math.max(max, s.order), -1);
     const subTask: SubTask = {
       id: crypto.randomUUID(),
       goalId: expandedGoal,
-      title: title.trim(),
+      title: subTaskTitle.trim(),
       completed: false,
       order: maxOrder + 1,
     };
     saveSubTask(subTask);
     setSubTasks(getSubTasks().filter((s) => s.goalId === expandedGoal));
-    setTitle("");
-    // Update goal progress
+    setSubTaskTitle("");
     const allForGoal = getSubTasks().filter((s) => s.goalId === expandedGoal);
     const completed = allForGoal.filter((s) => s.completed).length;
     const progress = allForGoal.length > 0 ? Math.round((completed / allForGoal.length) * 100) : 0;
@@ -155,6 +164,7 @@ export default function GoalsPage() {
             <h2 className="text-xl font-semibold">{editingGoal ? "Edit Goal" : "New Goal"}</h2>
             <Button variant="ghost" size="sm" onClick={resetForm}><X className="w-4 h-4" /></Button>
           </div>
+          <ErrorBanner message={error} />
           <Input placeholder="Goal title" value={title} onChange={(e) => setTitle(e.target.value)} />
           <Textarea placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
           <div className="grid grid-cols-2 gap-4">
@@ -195,18 +205,18 @@ export default function GoalsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => toggleGoalStatus(goal)} className="p-2 hover:bg-accent rounded-lg transition-colors">
+                <button title="Toggle status" onClick={() => toggleGoalStatus(goal)} className="p-2 hover:bg-accent rounded-lg transition-colors">
                   {goal.status === "completed" ? <Check className="w-4 h-4 text-green-500" /> : <X className="w-4 h-4" />}
                 </button>
-                <button onClick={() => handleEdit(goal)} className="p-2 hover:bg-accent rounded-lg transition-colors">
+                <button title="Edit goal" onClick={() => handleEdit(goal)} className="p-2 hover:bg-accent rounded-lg transition-colors">
                   ✏️
                 </button>
-                <button onClick={() => {
+                <button title="Expand" onClick={() => {
                   setExpandedGoal(expandedGoal === goal.id ? null : goal.id);
                 }} className="p-2 hover:bg-accent rounded-lg transition-colors">
                   <ChevronDown className={`w-4 h-4 ${expandedGoal === goal.id ? "rotate-180" : ""}`} />
                 </button>
-                <button onClick={() => { deleteGoal(goal.id); setGoals(getGoals()); }} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-destructive">
+                <button title="Delete goal" onClick={() => { if (confirm(`Delete goal "${goal.title}" and its sub-tasks?`)) { deleteGoal(goal.id); setGoals(getGoals()); } }} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-destructive">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -216,7 +226,7 @@ export default function GoalsPage() {
               <div className="mt-4 pt-4 border-t border-border space-y-3">
                 <h4 className="font-medium text-sm">Sub-Tasks</h4>
                 <div className="flex gap-2">
-                  <Input placeholder="Add sub-task..." value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSubTask()} className="flex-1" />
+                  <Input placeholder="Add sub-task..." value={subTaskTitle} onChange={(e) => setSubTaskTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSubTask()} className="flex-1" />
                   <Button size="sm" onClick={addSubTask}>Add</Button>
                 </div>
                 {subTasks.map((sub) => (

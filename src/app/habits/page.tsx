@@ -5,6 +5,7 @@ import { getHabits, saveHabit, deleteHabit } from "@/lib/db";
 import { getHabitLogs, logHabit } from "@/lib/db";
 import { Habit } from "@/lib/types";
 import { format, startOfToday, subDays, eachDayOfInterval } from "date-fns";
+import { consecutiveStreak, longestStreak, todayKey } from "@/lib/stats";
 import {
   CheckCircle2,
   Plus,
@@ -78,22 +79,22 @@ export default function HabitsPage() {
     );
   };
 
-  const checkHabit = (habitId: string) => {
-    const today = format(startOfToday(), "yyyy-MM-dd");
-    logHabit(habitId, today, true);
+  const toggleHabit = (habitId: string) => {
     const habit = habits.find((h) => h.id === habitId);
-    if (habit) {
-      const newStreak = getHabitLogs().filter(
-        (l) => l.habitId === habitId && l.completed
-      ).length;
-      saveHabit({ ...habit, streak: newStreak, lastChecked: today });
-      setHabits(getHabits());
-    }
+    if (!habit) return;
+    const today = todayKey();
+    const logs = getHabitLogs();
+    const existing = logs.some((l) => l.habitId === habitId && l.date === today && l.completed);
+    logHabit(habitId, today, !existing);
+    const updatedLogs = getHabitLogs().filter((l) => l.habitId === habitId);
+    const streak = consecutiveStreak(updatedLogs, today);
+    const best = Math.max(habit.longestStreak, longestStreak(updatedLogs));
+    saveHabit({ ...habit, streak, longestStreak: best, lastChecked: today });
+    setHabits(getHabits());
   };
 
   const getTodayStatus = (habitId: string) => {
-    const today = format(startOfToday(), "yyyy-MM-dd");
-    return getHabitLogs().some((l) => l.habitId === habitId && l.date === today && l.completed);
+    return getHabitLogs().some((l) => l.habitId === habitId && l.date === todayKey() && l.completed);
   };
 
   const weekLogs = useMemo(() => {
@@ -194,17 +195,18 @@ export default function HabitsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => checkHabit(habit.id)}
+                    title={todayCompleted ? "Uncheck today" : "Check today"}
+                    onClick={() => toggleHabit(habit.id)}
                     className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
                       todayCompleted ? "bg-green-500 text-white" : "border hover:bg-accent"
                     }`}
                   >
                     {todayCompleted ? "✓" : "+"}
                   </button>
-                  <button onClick={() => handleEdit(habit)} className="p-2 hover:bg-accent rounded-lg transition-colors">
+                  <button title="Edit habit" onClick={() => handleEdit(habit)} className="p-2 hover:bg-accent rounded-lg transition-colors">
                     <Edit3 className="w-4 h-4" />
                   </button>
-                  <button onClick={() => { deleteHabit(habit.id); setHabits(getHabits()); }} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-destructive">
+                  <button title="Delete habit" onClick={() => { if (confirm(`Delete habit "${habit.name}" and its history?`)) { deleteHabit(habit.id); setHabits(getHabits()); } }} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-destructive">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>

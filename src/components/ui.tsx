@@ -69,6 +69,30 @@ export function Badge({ children, variant = "default", className = "" }: { child
   );
 }
 
+export function ErrorBanner({ message }: { message: string }) {
+  if (!message) return null;
+  return (
+    <div
+      role="alert"
+      className="p-3 rounded-lg border border-destructive bg-destructive/10 text-destructive text-sm"
+    >
+      {message}
+    </div>
+  );
+}
+
+export function StorageBanner({ warning }: { warning: string | null }) {
+  if (!warning) return null;
+  return (
+    <div
+      role="alert"
+      className="p-3 rounded-lg border border-warning bg-warning/10 text-warning text-sm"
+    >
+      {warning}
+    </div>
+  );
+}
+
 export function Select({
   className = "",
   children,

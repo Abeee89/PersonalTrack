@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { getJournalEntries, saveJournalEntry, deleteJournalEntry } from "@/lib/db";
+import { useState, useEffect, useRef } from "react";
+import { getJournalEntries, saveJournalEntry, deleteJournalEntry, StorageError } from "@/lib/db";
 import { JournalEntry } from "@/lib/types";
-import { format, startOfToday, subDays, parseISO } from "date-fns";
+import { format, parseISO, subDays, addDays, isBefore, isAfter, startOfToday } from "date-fns";
 import {
   PenLine,
   Calendar,
@@ -11,8 +11,10 @@ import {
   Save,
   Plus,
   Image as ImageIcon,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import { Card, Button, Input, Textarea } from "@/components/ui";
+import { Card, Button, Input, Textarea, ErrorBanner } from "@/components/ui";
 
 const MOODS = [1, 2, 3, 4, 5];
 const MOOD_EMOJIS: Record<number, string> = { 1: "😢", 2: "😕", 3: "🙂", 4: "😊", 5: "🤩" };
@@ -20,15 +22,22 @@ const MOOD_EMOJIS: Record<number, string> = { 1: "😢", 2: "😕", 3: "🙂", 4
 export default function JournalPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState(format(startOfToday(), "yyyy-MM-dd"));
+  const [isReady, setIsReady] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [mood, setMood] = useState(0);
   const [tags, setTags] = useState("");
   const [editing, setEditing] = useState(false);
+  const [error, setError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useState(() => {
+  const today = format(startOfToday(), "yyyy-MM-dd");
+  const earliest = format(subDays(startOfToday(), 365), "yyyy-MM-dd");
+
+  useEffect(() => {
     setEntries(getJournalEntries());
-  });
+    setIsReady(true);
+  }, []);
 
   const loadEntry = (date: string) => {
     setSelectedDate(date);
@@ -48,69 +57,107 @@ export default function JournalPage() {
     }
   };
 
-  const dates = useMemo(() => {
-    const arr: string[] = [];
-    for (let i = 6; i >= 0; i--) {
-      arr.push(format(subDays(startOfToday(), i), "yyyy-MM-dd"));
-    }
-    return arr;
-  }, []);
+  const shiftDate = (delta: number) => {
+    const next = format(addDays(parseISO(selectedDate), delta), "yyyy-MM-dd");
+    if (delta > 0 && isAfter(parseISO(next), startOfToday())) return;
+    if (delta < 0 && isBefore(parseISO(next), parseISO(earliest))) return;
+    loadEntry(next);
+  };
+
+  const goToday = () => loadEntry(today);
+
+  const canGoNext = isBefore(parseISO(selectedDate), startOfToday());
+  const canGoPrev = isAfter(parseISO(selectedDate), parseISO(earliest));
 
   const handleSave = () => {
-    const entry: JournalEntry = {
-      id: entries.find((e) => e.date === selectedDate)?.id || crypto.randomUUID(),
-      date: selectedDate,
-      title,
-      content,
-      mood,
-      tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
-      photos: [],
-      createdAt: entries.find((e) => e.date === selectedDate)?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    saveJournalEntry(entry);
-    setEntries(getJournalEntries());
-    setEditing(true);
+    try {
+      const existing = entries.find((e) => e.date === selectedDate);
+      const entry: JournalEntry = {
+        id: existing?.id || crypto.randomUUID(),
+        date: selectedDate,
+        title,
+        content,
+        mood,
+        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+        photos: existing?.photos || [],
+        createdAt: existing?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      saveJournalEntry(entry);
+      setEntries(getJournalEntries());
+      setEditing(true);
+      setError("");
+    } catch (e) {
+      setError(e instanceof StorageError ? e.message : "Could not save entry.");
+    }
   };
 
   const handleDelete = () => {
     const entry = entries.find((e) => e.date === selectedDate);
-    if (entry && confirm("Delete this entry?")) {
-      deleteJournalEntry(entry.id);
-      setEntries(getJournalEntries());
-      setEditing(false);
-      setTitle("");
-      setContent("");
-      setMood(0);
-      setTags("");
+    if (entry && confirm("Delete this entry permanently? This cannot be undone.")) {
+      try {
+        deleteJournalEntry(entry.id);
+        setEntries(getJournalEntries());
+        setEditing(false);
+        setTitle("");
+        setContent("");
+        setMood(0);
+        setTags("");
+        setError("");
+      } catch (e) {
+        setError(e instanceof StorageError ? e.message : "Could not delete entry.");
+      }
     }
   };
 
-  const handleAddPhoto = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.multiple = true;
-    input.onchange = (e) => {
-      const files = (e.target as HTMLInputElement).files;
-      if (!files) return;
-      Array.from(files).forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          const dataUrl = ev.target?.result as string;
-          const entry = entries.find((e) => e.date === selectedDate);
-          const photos = entry?.photos || [];
-          photos.push(dataUrl);
-          setTitle(entry?.title || "");
-          setContent(entry?.content || "");
-          setMood(entry?.mood || 0);
-          setTags((entry?.tags.join(", ") || ""));
-          // We need to update the entry with the new photo
-        };
-        reader.readAsDataURL(file);
-      });
-    };
-    input.click();
+  const handleAddPhotos = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const existing = entries.find((e) => e.date === selectedDate);
+    const current = existing?.photos || [];
+    const currentCount = current.length;
+    const limited: File[] = [];
+    Array.from(files).forEach((file) => {
+      if (currentCount + limited.length >= 10) return;
+      if (!file.type.startsWith("image/")) return;
+      if (file.size > 2 * 1024 * 1024) return;
+      limited.push(file);
+    });
+    if (limited.length === 0) {
+      setError("No valid images selected. Max 2MB per photo, 10 per entry.");
+      return;
+    }
+    let pending = limited.length;
+    const nextPhotos = [...current];
+    limited.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        nextPhotos.push(dataUrl.replace(/^data:(image\/[^;]+);base64,/, "data:$1;base64,"));
+        pending -= 1;
+        if (pending === 0) {
+          try {
+            const entry: JournalEntry = {
+              id: existing?.id || crypto.randomUUID(),
+              date: selectedDate,
+              title: existing?.title || "",
+              content: existing?.content || "",
+              mood: existing?.mood || 0,
+              tags: existing?.tags || [],
+              photos: nextPhotos.slice(0, 10),
+              createdAt: existing?.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            saveJournalEntry(entry);
+            setEntries(getJournalEntries());
+            setEditing(true);
+            setError("");
+          } catch (e) {
+            setError(e instanceof StorageError ? e.message : "Could not save photos.");
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   return (
@@ -128,25 +175,51 @@ export default function JournalPage() {
           <h3 className="font-semibold mb-3 flex items-center gap-2">
             <Calendar className="w-4 h-4" /> Dates
           </h3>
-          <div className="space-y-1">
-            {dates.map((d) => (
-              <button
-                key={d}
-                onClick={() => loadEntry(d)}
-                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                  selectedDate === d
-                    ? "bg-foreground text-background"
-                    : "hover:bg-accent text-muted-foreground"
-                }`}
+          {isReady && (
+            <div className="flex items-center gap-1 mb-3">
+              <Button variant="outline" size="sm" title="Earlier day" onClick={() => shiftDate(-1)} disabled={!canGoPrev}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={selectedDate === today ? "default" : "outline"}
+                size="sm"
+                className="flex-1 justify-center"
+                title="Jump to today"
+                onClick={goToday}
               >
-                {format(parseISO(d), "MMM d, yyyy")}
-                {d === format(startOfToday(), "yyyy-MM-dd") && " (Today)"}
-              </button>
-            ))}
+                {format(parseISO(selectedDate), "EEE, MMM d")}
+              </Button>
+              <Button variant="outline" size="sm" title="Later day" onClick={() => shiftDate(1)} disabled={!canGoNext}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+          <div className="space-y-1">
+            {(() => {
+              const dates: string[] = [];
+              for (let i = 6; i >= 0; i--) {
+                dates.push(format(addDays(startOfToday(), -i), "yyyy-MM-dd"));
+              }
+              return dates.map((d) => (
+                <button
+                  key={d}
+                  onClick={() => loadEntry(d)}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                    selectedDate === d
+                      ? "bg-foreground text-background"
+                      : "hover:bg-accent text-muted-foreground"
+                  }`}
+                >
+                  {format(parseISO(d), "MMM d, yyyy")}
+                  {d === today && " (Today)"}
+                </button>
+              ));
+            })()}
           </div>
         </div>
 
         <div className="md:col-span-2">
+          <ErrorBanner message={error} />
           <Card className="p-6 space-y-4">
             <div>
               <label className="text-sm font-medium text-muted-foreground">Title</label>
@@ -196,9 +269,34 @@ export default function JournalPage() {
             </div>
 
             <div className="flex items-center justify-between">
-              <Button variant="outline" size="sm" onClick={handleAddPhoto}>
-                <ImageIcon className="w-4 h-4 inline mr-1" /> Add Photos
-              </Button>
+              <div className="flex items-center gap-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  multiple
+                  className="hidden"
+                  disabled={!editing}
+                  onChange={(e) => {
+                    handleAddPhotos(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!editing}
+                >
+                  <ImageIcon className="w-4 h-4 inline mr-1" /> Add Photos
+                </Button>
+                {editing && (entries.find((e) => e.date === selectedDate)?.photos.length ?? 0) > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {(entries.find((e) => e.date === selectedDate)?.photos.length) ?? 0} photo(s)
+                  </span>
+                )}
+              </div>
               {editing && (
                 <Button variant="destructive" size="sm" onClick={handleDelete}>
                   <Trash2 className="w-4 h-4 inline mr-1" /> Delete

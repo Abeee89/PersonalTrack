@@ -69,7 +69,7 @@ export default function HabitDetailPage() {
             {habit.description && <p className="text-sm text-muted-foreground">{habit.description}</p>}
           </div>
         </div>
-        <Button variant="destructive" onClick={() => { deleteHabit(habitId); router.push("/habits"); }}>
+        <Button variant="destructive" onClick={() => { if (confirm(`Delete habit "${habit.name}" and its history?`)) { deleteHabit(habitId); router.push("/habits"); } }}>
           <Trash2 className="w-4 h-4 inline mr-1" /> Delete
         </Button>
       </div>

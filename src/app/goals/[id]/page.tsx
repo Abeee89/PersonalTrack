@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getGoals, saveGoal, deleteGoal, getSubTasks, saveSubTask, deleteSubTask } from "@/lib/db";
+import { getGoals, saveGoal, deleteGoal, getSubTasks, saveSubTask, deleteSubTask, StorageError } from "@/lib/db";
 import { Goal, SubTask } from "@/lib/types";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import {
@@ -13,7 +13,7 @@ import {
   Plus,
   Clock,
 } from "lucide-react";
-import { Card, Button, Input, Badge } from "@/components/ui";
+import { Card, Button, Input, Badge, ErrorBanner } from "@/components/ui";
 
 export default function GoalDetailPage() {
   const params = useParams();
@@ -22,6 +22,7 @@ export default function GoalDetailPage() {
   const [goal, setGoal] = useState<Goal | null>(null);
   const [subTasks, setSubTasks] = useState<SubTask[]>([]);
   const [newTitle, setNewTitle] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const g = getGoals().find((g) => g.id === goalId);
@@ -62,11 +63,24 @@ export default function GoalDetailPage() {
 
   const toggleStatus = () => {
     if (!goal) return;
-    const next: Goal["status"] = goal.status === "completed" ? "not_started" : goal.status === "in_progress" ? "completed" : "in_progress";
-    const progress = next === "completed" ? 100 : next === "not_started" ? 0 : goal.progress;
+    const next: Goal["status"] = goal.status === "completed" ? "in_progress" : goal.status === "in_progress" ? "completed" : "in_progress";
+    const subs = getSubTasks().filter((s) => s.goalId === goalId);
+    const completedSubs = subs.filter((s) => s.completed).length;
+    const subtaskProgress = subs.length > 0 ? Math.round((completedSubs / subs.length) * 100) : 0;
+    const progress = next === "completed" ? 100 : next === "in_progress" ? Math.max(goal.progress, subtaskProgress) : 0;
     const updated = { ...goal, status: next, progress };
     saveGoal(updated);
     setGoal(updated);
+  };
+
+  const handleDelete = () => {
+    if (!confirm(`Delete goal "${goal?.title}" and its sub-tasks? This cannot be undone.`)) return;
+    try {
+      deleteGoal(goalId);
+      router.push("/goals");
+    } catch (e) {
+      setError(e instanceof StorageError ? e.message : "Could not delete goal.");
+    }
   };
 
   if (!goal) {
@@ -97,12 +111,13 @@ export default function GoalDetailPage() {
           <Button variant="outline" onClick={toggleStatus}>
             {goal.status === "completed" ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
           </Button>
-          <Button variant="destructive" onClick={() => { deleteGoal(goalId); router.push("/goals"); }}>
+          <Button variant="destructive" onClick={handleDelete}>
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>
       </div>
 
+      <ErrorBanner message={error} />
       <Card className="p-6 mb-6">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-lg font-semibold">Progress</h2>
