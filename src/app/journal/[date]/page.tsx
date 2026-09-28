@@ -95,7 +95,7 @@ export default function JournalDatePage() {
     <div className="max-w-3xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => router.push("/journal")}>
+          <Button variant="ghost" size="sm" aria-label="Back to journal" onClick={() => router.push("/journal")}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <h1 className="text-2xl font-bold tracking-tight">
@@ -121,8 +121,10 @@ export default function JournalDatePage() {
             {MOODS.map((m) => (
               <button
                 key={m}
+                aria-pressed={mood === m}
+                aria-label={`Mood ${m} of 5`}
                 onClick={() => setMood(m)}
-                className={`text-2xl px-2 py-1 rounded-lg transition-colors ${mood === m ? "bg-accent" : "hover:bg-accent"}`}
+                className={`text-2xl w-11 h-11 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${mood === m ? "bg-brand-soft ring-1 ring-brand" : "hover:bg-accent"}`}
               >
                 {MOOD_EMOJIS[m]}
               </button>

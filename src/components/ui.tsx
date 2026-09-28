@@ -13,8 +13,8 @@ export function Button({
   const base =
     "inline-flex items-center justify-center rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
   const sizes = {
-    default: "h-10 px-4 py-2",
-    sm: "h-8 px-3 text-xs",
+    default: "min-h-11 px-4 py-2",
+    sm: "h-9 px-3 text-xs",
     lg: "h-12 px-6 text-base",
   };
   const variants = {
@@ -74,21 +74,9 @@ export function ErrorBanner({ message }: { message: string }) {
   return (
     <div
       role="alert"
-      className="p-3 rounded-lg border border-destructive bg-destructive/10 text-destructive text-sm"
+      className="mb-4 p-3 rounded-lg border border-destructive/40 bg-destructive/10 text-destructive-text text-sm"
     >
       {message}
-    </div>
-  );
-}
-
-export function StorageBanner({ warning }: { warning: string | null }) {
-  if (!warning) return null;
-  return (
-    <div
-      role="alert"
-      className="p-3 rounded-lg border border-warning bg-warning/10 text-warning text-sm"
-    >
-      {warning}
     </div>
   );
 }

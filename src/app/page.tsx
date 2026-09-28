@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getJournalEntries, getHabits, getGoals, getHabitLogs } from "@/lib/db";
 import { JournalEntry, Habit, Goal } from "@/lib/types";
 import { format, parseISO } from "date-fns";
@@ -9,10 +9,9 @@ import {
   CheckCircle2,
   Target,
   FileText,
-  ArrowRight,
   Flame,
 } from "lucide-react";
-import { Card, Button, Badge } from "@/components/ui";
+import { Card, Badge } from "@/components/ui";
 
 function getMoodEmoji(mood: number): string {
   const emojis = ["", "😢", "😕", "🙂", "😊", "🤩"];
@@ -20,7 +19,6 @@ function getMoodEmoji(mood: number): string {
 }
 
 export default function Dashboard() {
-  const router = useRouter();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -62,7 +60,7 @@ export default function Dashboard() {
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Your personal tracking overview</p>
+        <p className="text-muted-foreground mt-1">A small, honest look at your days.</p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -104,28 +102,29 @@ export default function Dashboard() {
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Recent Journal</h2>
-            <Button variant="outline" onClick={() => router.push("/journal")}>
-              View All <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
+            <Link
+              href="/journal"
+              className="inline-flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-lg border border-input hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              See all entries
+            </Link>
           </div>
           {recentEntries.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No entries yet. Start journaling!</p>
+            <p className="text-muted-foreground text-sm">Nothing written yet. The first line is the hardest part.</p>
           ) : (
-            <ul className="space-y-3">
+            <ul className="space-y-1">
               {recentEntries.map((entry) => (
-                <li
-                  key={entry.id}
-                  className="flex items-center justify-between py-2 border-b border-border last:border-0 cursor-pointer hover:bg-accent/50 rounded px-2 -mx-2 transition-colors"
-                  onClick={() => router.push(`/journal/${entry.date}`)}
-                >
-                  <div>
-                    <p className="font-medium text-sm">{entry.title || "Untitled Entry"}</p>
-                    <p className="text-xs text-muted-foreground">{format(parseISO(entry.date), "MMM d, yyyy")}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {entry.mood > 0 && <span>{getMoodEmoji(entry.mood)}</span>}
-                    <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
+                <li key={entry.id}>
+                  <Link
+                    href={`/journal/${entry.date}`}
+                    className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+                  >
+                    <span>
+                      <span className="block font-medium text-sm">{entry.title || "Untitled entry"}</span>
+                      <span className="block text-xs text-muted-foreground">{format(parseISO(entry.date), "MMM d, yyyy")}</span>
+                    </span>
+                    {entry.mood > 0 && <span aria-hidden="true">{getMoodEmoji(entry.mood)}</span>}
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -135,30 +134,34 @@ export default function Dashboard() {
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Active Goals</h2>
-            <Button variant="outline" onClick={() => router.push("/goals")}>
-              View All <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
+            <Link
+              href="/goals"
+              className="inline-flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-lg border border-input hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              See all goals
+            </Link>
           </div>
           {activeGoals.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No active goals. Set a goal to get started!</p>
+            <p className="text-muted-foreground text-sm">No goals in motion. Pick one thing you want to finish.</p>
           ) : (
-            <ul className="space-y-3">
+            <ul className="space-y-1">
               {activeGoals.map((goal) => (
-                <li
-                  key={goal.id}
-                  className="flex items-center justify-between py-2 border-b border-border last:border-0 cursor-pointer hover:bg-accent/50 rounded px-2 -mx-2 transition-colors"
-                  onClick={() => router.push(`/goals/${goal.id}`)}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{goal.title}</p>
-                    <div className="w-full bg-muted rounded-full h-1.5 mt-1">
-                      <div
-                        className="bg-foreground h-1.5 rounded-full transition-all"
-                        style={{ width: `${goal.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                  <span className="text-sm text-muted-foreground ml-2">{goal.progress}%</span>
+                <li key={goal.id}>
+                  <Link
+                    href={`/goals/${goal.id}`}
+                    className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+                  >
+                    <span className="flex-1 min-w-0">
+                      <span className="block font-medium text-sm truncate">{goal.title}</span>
+                      <span className="block w-full bg-muted rounded-full h-1.5 mt-1">
+                        <span
+                          className="block bg-brand h-1.5 rounded-full transition-all"
+                          style={{ width: `${goal.progress}%` }}
+                        />
+                      </span>
+                    </span>
+                    <span className="text-sm text-muted-foreground ml-2">{goal.progress}%</span>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -171,18 +174,27 @@ export default function Dashboard() {
           <h2 className="text-xl font-semibold">Quick Add</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Button onClick={() => router.push("/journal")} className="h-20 flex-col gap-2">
+          <Link
+            href="/journal"
+            className="inline-flex items-center justify-center gap-2 min-h-20 rounded-lg bg-foreground text-background hover:bg-accent hover:text-accent-foreground text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <FileText className="w-6 h-6" />
-            New Journal Entry
-          </Button>
-          <Button variant="outline" onClick={() => router.push("/habits")} className="h-20 flex-col gap-2">
+            Start a journal entry
+          </Link>
+          <Link
+            href="/habits"
+            className="inline-flex items-center justify-center gap-2 min-h-20 rounded-lg border border-input text-sm font-medium hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <CheckCircle2 className="w-6 h-6" />
-            Add Habit
-          </Button>
-          <Button variant="outline" onClick={() => router.push("/goals")} className="h-20 flex-col gap-2">
+            Add a habit
+          </Link>
+          <Link
+            href="/goals"
+            className="inline-flex items-center justify-center gap-2 min-h-20 rounded-lg border border-input text-sm font-medium hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <Target className="w-6 h-6" />
-            New Goal
-          </Button>
+            Set a goal
+          </Link>
         </div>
       </Card>
     </div>

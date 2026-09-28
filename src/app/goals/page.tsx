@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getGoals, saveGoal, deleteGoal, getSubTasks, saveSubTask, StorageError } from "@/lib/db";
+import { getGoals, saveGoal, deleteGoal, getSubTasks, saveSubTask, deleteSubTask, StorageError } from "@/lib/db";
 import { Goal, SubTask } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 import {
@@ -11,6 +11,7 @@ import {
   Check,
   X,
   ChevronDown,
+  Pencil,
 } from "lucide-react";
 import { Card, Button, Input, Textarea, Select, Badge, ErrorBanner } from "@/components/ui";
 
@@ -78,66 +79,89 @@ export default function GoalsPage() {
     setShowForm(true);
   };
 
+  const handleDeleteGoal = (goal: Goal) => {
+    if (!confirm(`Delete goal "${goal.title}" and its sub-tasks?`)) return;
+    try {
+      deleteGoal(goal.id);
+      setGoals(getGoals());
+      if (expandedGoal === goal.id) setExpandedGoal(null);
+      setError("");
+    } catch (e) {
+      setError(e instanceof StorageError ? e.message : "Could not delete goal.");
+    }
+  };
+
   const toggleGoalStatus = (goal: Goal) => {
     const next = goal.status === "completed" ? "in_progress" : goal.status === "in_progress" ? "completed" : "in_progress";
     const allForGoal = getSubTasks().filter((s) => s.goalId === goal.id);
     const completed = allForGoal.filter((s) => s.completed).length;
     const subtaskProgress = allForGoal.length > 0 ? Math.round((completed / allForGoal.length) * 100) : 0;
     const progress = next === "completed" ? 100 : next === "in_progress" ? Math.max(goal.progress, subtaskProgress) : 0;
-    saveGoal({ ...goal, status: next, progress });
-    setGoals(getGoals());
+    try {
+      saveGoal({ ...goal, status: next, progress });
+      setGoals(getGoals());
+      setError("");
+    } catch (e) {
+      setError(e instanceof StorageError ? e.message : "Could not update goal.");
+    }
   };
 
-  const addSubTask = () => {
-    if (!expandedGoal || !subTaskTitle.trim()) return;
-    const allSubTasks = getSubTasks();
-    const maxOrder = allSubTasks.filter((s) => s.goalId === expandedGoal).reduce((max, s) => Math.max(max, s.order), -1);
-    const subTask: SubTask = {
-      id: crypto.randomUUID(),
-      goalId: expandedGoal,
-      title: subTaskTitle.trim(),
-      completed: false,
-      order: maxOrder + 1,
-    };
-    saveSubTask(subTask);
-    setSubTasks(getSubTasks().filter((s) => s.goalId === expandedGoal));
-    setSubTaskTitle("");
+  const refreshGoalProgress = () => {
+    if (!expandedGoal) return;
     const allForGoal = getSubTasks().filter((s) => s.goalId === expandedGoal);
     const completed = allForGoal.filter((s) => s.completed).length;
     const progress = allForGoal.length > 0 ? Math.round((completed / allForGoal.length) * 100) : 0;
     const goal = getGoals().find((g) => g.id === expandedGoal);
     if (goal) {
-      saveGoal({ ...goal, progress });
+      const nextStatus = goal.status === "not_started" && progress > 0 ? "in_progress" : goal.status;
+      saveGoal({ ...goal, progress, status: nextStatus });
       setGoals(getGoals());
+    }
+  };
+
+  const addSubTask = () => {
+    if (!expandedGoal || !subTaskTitle.trim()) return;
+    try {
+      const allSubTasks = getSubTasks();
+      const maxOrder = allSubTasks.filter((s) => s.goalId === expandedGoal).reduce((max, s) => Math.max(max, s.order), -1);
+      const subTask: SubTask = {
+        id: crypto.randomUUID(),
+        goalId: expandedGoal,
+        title: subTaskTitle.trim(),
+        completed: false,
+        order: maxOrder + 1,
+      };
+      saveSubTask(subTask);
+      setSubTasks(getSubTasks().filter((s) => s.goalId === expandedGoal));
+      setSubTaskTitle("");
+      refreshGoalProgress();
+      setError("");
+    } catch (e) {
+      setError(e instanceof StorageError ? e.message : "Could not add sub-task.");
     }
   };
 
   const toggleSubTask = (subTaskId: string) => {
     const sub = getSubTasks().find((s) => s.id === subTaskId);
-    if (sub) {
+    if (!sub) return;
+    try {
       saveSubTask({ ...sub, completed: !sub.completed });
       setSubTasks(getSubTasks().filter((s) => s.goalId === expandedGoal));
-      const allForGoal = getSubTasks().filter((s) => s.goalId === expandedGoal);
-      const completed = allForGoal.filter((s) => s.completed).length;
-      const progress = allForGoal.length > 0 ? Math.round((completed / allForGoal.length) * 100) : 0;
-      const goal = getGoals().find((g) => g.id === expandedGoal);
-      if (goal) {
-        saveGoal({ ...goal, progress });
-        setGoals(getGoals());
-      }
+      refreshGoalProgress();
+      setError("");
+    } catch (e) {
+      setError(e instanceof StorageError ? e.message : "Could not update sub-task.");
     }
   };
 
-  const deleteSubTask = (id: string) => {
-    deleteSubTask(id);
-    setSubTasks(getSubTasks().filter((s) => s.goalId === expandedGoal));
-    const allForGoal = getSubTasks().filter((s) => s.goalId === expandedGoal);
-    const completed = allForGoal.filter((s) => s.completed).length;
-    const progress = allForGoal.length > 0 ? Math.round((completed / allForGoal.length) * 100) : 0;
-    const goal = getGoals().find((g) => g.id === expandedGoal);
-    if (goal) {
-      saveGoal({ ...goal, progress });
-      setGoals(getGoals());
+  const handleDeleteSubTask = (id: string) => {
+    try {
+      deleteSubTask(id);
+      setSubTasks(getSubTasks().filter((s) => s.goalId === expandedGoal));
+      refreshGoalProgress();
+      setError("");
+    } catch (e) {
+      setError(e instanceof StorageError ? e.message : "Could not delete sub-task.");
     }
   };
 
@@ -158,13 +182,14 @@ export default function GoalsPage() {
         </Button>
       </div>
 
+      <ErrorBanner message={error} />
+
       {showForm && (
         <Card className="p-6 mb-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">{editingGoal ? "Edit Goal" : "New Goal"}</h2>
             <Button variant="ghost" size="sm" onClick={resetForm}><X className="w-4 h-4" /></Button>
           </div>
-          <ErrorBanner message={error} />
           <Input placeholder="Goal title" value={title} onChange={(e) => setTitle(e.target.value)} />
           <Textarea placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
           <div className="grid grid-cols-2 gap-4">
@@ -196,7 +221,7 @@ export default function GoalsPage() {
                 {goal.description && <p className="text-sm text-muted-foreground mt-1">{goal.description}</p>}
                 <div className="flex items-center gap-3 mt-2">
                   <div className="w-full bg-muted rounded-full h-2 max-w-xs">
-                    <div className="bg-foreground h-2 rounded-full transition-all" style={{ width: `${goal.progress}%` }} />
+                    <div className="bg-brand h-2 rounded-full transition-all" style={{ width: `${goal.progress}%` }} />
                   </div>
                   <span className="text-sm text-muted-foreground">{goal.progress}%</span>
                   {goal.deadline && (
@@ -205,18 +230,18 @@ export default function GoalsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <button title="Toggle status" onClick={() => toggleGoalStatus(goal)} className="p-2 hover:bg-accent rounded-lg transition-colors">
-                  {goal.status === "completed" ? <Check className="w-4 h-4 text-green-500" /> : <X className="w-4 h-4" />}
+                <button title="Toggle status" aria-label={`Change status of ${goal.title}`} onClick={() => toggleGoalStatus(goal)} className="w-11 h-11 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  {goal.status === "completed" ? <Check className="w-4 h-4 text-success" /> : <X className="w-4 h-4" />}
                 </button>
-                <button title="Edit goal" onClick={() => handleEdit(goal)} className="p-2 hover:bg-accent rounded-lg transition-colors">
-                  ✏️
+                <button title="Edit goal" aria-label={`Edit ${goal.title}`} onClick={() => handleEdit(goal)} className="w-11 h-11 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <Pencil className="w-4 h-4" />
                 </button>
-                <button title="Expand" onClick={() => {
+                <button title="Expand" aria-expanded={expandedGoal === goal.id} aria-label={`Sub-tasks of ${goal.title}`} onClick={() => {
                   setExpandedGoal(expandedGoal === goal.id ? null : goal.id);
-                }} className="p-2 hover:bg-accent rounded-lg transition-colors">
+                }} className="w-11 h-11 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <ChevronDown className={`w-4 h-4 ${expandedGoal === goal.id ? "rotate-180" : ""}`} />
                 </button>
-                <button title="Delete goal" onClick={() => { if (confirm(`Delete goal "${goal.title}" and its sub-tasks?`)) { deleteGoal(goal.id); setGoals(getGoals()); } }} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-destructive">
+                <button title="Delete goal" aria-label={`Delete ${goal.title}`} onClick={() => handleDeleteGoal(goal)} className="w-11 h-11 flex items-center justify-center hover:bg-destructive/10 rounded-lg transition-colors text-destructive-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -231,16 +256,16 @@ export default function GoalsPage() {
                 </div>
                 {subTasks.map((sub) => (
                   <div key={sub.id} className="flex items-center gap-2">
-                    <button onClick={() => toggleSubTask(sub.id)} className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${sub.completed ? "bg-green-500 border-green-500 text-white" : "border-input hover:bg-accent"}`}>
-                      {sub.completed && <Check className="w-3 h-3" />}
+                    <button aria-pressed={sub.completed} aria-label={`Mark ${sub.title} ${sub.completed ? "incomplete" : "complete"}`} onClick={() => toggleSubTask(sub.id)} className={`w-6 h-6 shrink-0 rounded border flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${sub.completed ? "bg-success border-success text-success-foreground" : "border-input hover:bg-accent"}`}>
+                      {sub.completed && <Check className="w-3.5 h-3.5" />}
                     </button>
                     <span className={`text-sm ${sub.completed ? "line-through text-muted-foreground" : ""}`}>{sub.title}</span>
-                    <button onClick={() => deleteSubTask(sub.id)} className="ml-auto text-muted-foreground hover:text-destructive">
-                      <X className="w-3 h-3" />
+                    <button title="Remove sub-task" aria-label={`Remove ${sub.title}`} onClick={() => handleDeleteSubTask(sub.id)} className="w-11 h-11 -my-2 flex items-center justify-center text-muted-foreground hover:text-destructive-text rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ))}
-                {subTasks.length === 0 && <p className="text-sm text-muted-foreground">No sub-tasks yet.</p>}
+                {subTasks.length === 0 && <p className="text-sm text-muted-foreground">No sub-tasks yet. Break the goal into small steps.</p>}
               </div>
             )}
           </Card>
@@ -249,7 +274,7 @@ export default function GoalsPage() {
         {goals.length === 0 && !showForm && (
           <Card className="p-8 text-center">
             <Target className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No goals yet. Create one to get started!</p>
+            <p className="text-muted-foreground">No goals yet. One small, finishable goal beats five grand ones.</p>
           </Card>
         )}
       </div>

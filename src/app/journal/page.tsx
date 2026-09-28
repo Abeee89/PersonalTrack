@@ -215,7 +215,8 @@ export default function JournalPage() {
                 <button
                   key={d}
                   onClick={() => loadEntry(d)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                  aria-current={selectedDate === d ? "date" : undefined}
+                  className={`w-full min-h-11 text-left px-3 py-2 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     selectedDate === d
                       ? "bg-foreground text-background"
                       : "hover:bg-accent text-muted-foreground"
@@ -248,9 +249,11 @@ export default function JournalPage() {
                 {MOODS.map((m) => (
                   <button
                     key={m}
+                    aria-pressed={mood === m}
+                    aria-label={`Mood ${m} of 5`}
                     onClick={() => setMood(m)}
-                    className={`text-2xl px-2 py-1 rounded-lg transition-colors ${
-                      mood === m ? "bg-accent" : "hover:bg-accent"
+                    className={`text-2xl w-11 h-11 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      mood === m ? "bg-brand-soft ring-1 ring-brand" : "hover:bg-accent"
                     }`}
                   >
                     {MOOD_EMOJIS[m]}
@@ -285,7 +288,7 @@ export default function JournalPage() {
               return (
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Photos</label>
-                  <div className="grid grid-cols-4 gap-2 mt-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
                     {photos.map((src, i) => (
                       // data-URL previews from localStorage; next/image cannot optimize these
                       // eslint-disable-next-line @next/next/no-img-element

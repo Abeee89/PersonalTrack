@@ -132,9 +132,8 @@ export default function SettingsPage() {
         <Card className="p-6">
           <h2 className="text-xl font-semibold mb-4">About</h2>
           <div className="space-y-2 text-sm text-muted-foreground">
-            <p><strong className="text-foreground">PersonalTrack</strong> — Your local-first personal tracking app</p>
-            <p>Built with Next.js, TypeScript, and Tailwind CSS</p>
-            <p>All data is stored in your browser using localStorage. No server or cloud required.</p>
+            <p><strong className="text-foreground">PersonalTrack</strong>: a quiet, local-first notebook for journaling, habits, and goals.</p>
+            <p>Built with Next.js, TypeScript, and Tailwind CSS. No server, no cloud, no account. Your entries stay in this browser on this device.</p>
             <p className="flex items-center gap-1 mt-2">
               <FileJson className="w-4 h-4" /> Data format: JSON
             </p>

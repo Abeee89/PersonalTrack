@@ -61,7 +61,7 @@ export default function HabitDetailPage() {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => router.push("/habits")}>
+          <Button variant="ghost" size="sm" aria-label="Back to habits" onClick={() => router.push("/habits")}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div>
@@ -76,17 +76,17 @@ export default function HabitDetailPage() {
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <Card className="p-4 text-center">
-          <Flame className="w-6 h-6 text-orange-500 mx-auto" />
+          <Flame className="w-6 h-6 text-streak mx-auto" />
           <p className="text-2xl font-bold mt-1">{habit.streak}</p>
           <p className="text-xs text-muted-foreground">Current Streak</p>
         </Card>
         <Card className="p-4 text-center">
-          <TrendingUp className="w-6 h-6 text-blue-500 mx-auto" />
+          <TrendingUp className="w-6 h-6 text-muted-foreground mx-auto" />
           <p className="text-2xl font-bold mt-1">{habit.longestStreak}</p>
           <p className="text-xs text-muted-foreground">Best Streak</p>
         </Card>
         <Card className="p-4 text-center">
-          <Calendar className="w-6 h-6 text-green-500 mx-auto" />
+          <Calendar className="w-6 h-6 text-brand mx-auto" />
           <p className="text-2xl font-bold mt-1">{completionRate}%</p>
           <p className="text-xs text-muted-foreground">Completion Rate</p>
         </Card>
@@ -101,7 +101,7 @@ export default function HabitDetailPage() {
             return (
               <div key={dateStr} className="text-center">
                 <p className="text-xs text-muted-foreground">{format(day, "EEE")}</p>
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-sm font-medium mt-1 ${done ? "bg-green-500 text-white" : "bg-muted"}`}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-sm font-medium mt-1 ${done ? "bg-success text-success-foreground" : "bg-muted"}`}>
                   {format(day, "d")}
                 </div>
               </div>
@@ -119,7 +119,7 @@ export default function HabitDetailPage() {
             return (
               <div
                 key={dateStr}
-                className={`w-6 h-6 rounded ${done ? "bg-green-500" : "bg-muted"}`}
+                className={`w-6 h-6 rounded ${done ? "bg-brand" : "bg-muted"}`}
                 title={`${format(day, "MMM d")}: ${done ? "Done" : "Missed"}`}
               />
             );

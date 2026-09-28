@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { getHabits, saveHabit, deleteHabit } from "@/lib/db";
+import { getHabits, saveHabit, deleteHabit, StorageError } from "@/lib/db";
 import { getHabitLogs, logHabit } from "@/lib/db";
-import { Habit } from "@/lib/types";
+import { Habit, HabitLog } from "@/lib/types";
 import { format, startOfToday, subDays, eachDayOfInterval } from "date-fns";
 import { consecutiveStreak, longestStreak, todayKey } from "@/lib/stats";
 import {
@@ -15,13 +15,16 @@ import {
   Save,
   X,
 } from "lucide-react";
-import { Card, Button, Input, Textarea, Select, Badge } from "@/components/ui";
+import { Card, Button, Input, Textarea, Select, Badge, ErrorBanner } from "@/components/ui";
 
 const CATEGORIES = ["Health", "Productivity", "Fitness", "Mindfulness", "Learning", "Social", "Creative", "Other"];
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function HabitsPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
+  const [logs, setLogs] = useState<HabitLog[]>([]);
+  const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [name, setName] = useState("");
@@ -30,8 +33,14 @@ export default function HabitsPage() {
   const [targetDays, setTargetDays] = useState<string[]>([]);
   const [category, setCategory] = useState("Other");
 
-  useEffect(() => {
+  const refresh = () => {
     setHabits(getHabits());
+    setLogs(getHabitLogs());
+  };
+
+  useEffect(() => {
+    refresh();
+    setIsReady(true);
   }, []);
 
   const resetForm = () => {
@@ -58,9 +67,14 @@ export default function HabitsPage() {
       lastChecked: editingHabit?.lastChecked,
       createdAt: editingHabit?.createdAt || new Date().toISOString(),
     };
-    saveHabit(habit);
-    resetForm();
-    setHabits(getHabits());
+    try {
+      saveHabit(habit);
+      resetForm();
+      refresh();
+      setError("");
+    } catch (e) {
+      setError(e instanceof StorageError ? e.message : "Could not save habit.");
+    }
   };
 
   const handleEdit = (habit: Habit) => {
@@ -73,6 +87,17 @@ export default function HabitsPage() {
     setShowForm(true);
   };
 
+  const handleDeleteHabit = (habit: Habit) => {
+    if (!confirm(`Delete habit "${habit.name}" and its history?`)) return;
+    try {
+      deleteHabit(habit.id);
+      refresh();
+      setError("");
+    } catch (e) {
+      setError(e instanceof StorageError ? e.message : "Could not delete habit.");
+    }
+  };
+
   const toggleDay = (day: string) => {
     setTargetDays((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
@@ -83,18 +108,22 @@ export default function HabitsPage() {
     const habit = habits.find((h) => h.id === habitId);
     if (!habit) return;
     const today = todayKey();
-    const logs = getHabitLogs();
     const existing = logs.some((l) => l.habitId === habitId && l.date === today && l.completed);
-    logHabit(habitId, today, !existing);
-    const updatedLogs = getHabitLogs().filter((l) => l.habitId === habitId);
-    const streak = consecutiveStreak(updatedLogs, today);
-    const best = Math.max(habit.longestStreak, longestStreak(updatedLogs));
-    saveHabit({ ...habit, streak, longestStreak: best, lastChecked: today });
-    setHabits(getHabits());
+    try {
+      logHabit(habitId, today, !existing);
+      const updatedLogs = getHabitLogs().filter((l) => l.habitId === habitId);
+      const streak = consecutiveStreak(updatedLogs, today);
+      const best = Math.max(habit.longestStreak, longestStreak(updatedLogs));
+      saveHabit({ ...habit, streak, longestStreak: best, lastChecked: today });
+      refresh();
+      setError("");
+    } catch (e) {
+      setError(e instanceof StorageError ? e.message : "Could not update habit.");
+    }
   };
 
   const getTodayStatus = (habitId: string) => {
-    return getHabitLogs().some((l) => l.habitId === habitId && l.date === todayKey() && l.completed);
+    return logs.some((l) => l.habitId === habitId && l.date === todayKey() && l.completed);
   };
 
   const weekLogs = useMemo(() => {
@@ -116,6 +145,8 @@ export default function HabitsPage() {
           <Plus className="w-4 h-4 inline mr-1" /> Add Habit
         </Button>
       </div>
+
+      <ErrorBanner message={error} />
 
       {showForm && (
         <Card className="p-6 mb-6 space-y-4">
@@ -144,8 +175,9 @@ export default function HabitsPage() {
                 {DAY_NAMES.map((d) => (
                   <button
                     key={d}
+                    aria-pressed={targetDays.includes(d)}
                     onClick={() => toggleDay(d)}
-                    className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${
+                    className={`w-11 h-11 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                       targetDays.includes(d) ? "bg-foreground text-background" : "border hover:bg-accent"
                     }`}
                   >
@@ -170,20 +202,20 @@ export default function HabitsPage() {
                     <h3 className="font-semibold">{habit.name}</h3>
                     <Badge variant="outline">{habit.category}</Badge>
                     {habit.streak > 0 && (
-                      <span className="text-sm text-orange-500 flex items-center gap-1">
-                        <Flame className="w-3 h-3" /> {habit.streak}
+                      <span className="text-sm text-streak flex items-center gap-1">
+                        <Flame className="w-3 h-3" aria-hidden="true" /> {habit.streak} day{habit.streak === 1 ? "" : "s"}
                       </span>
                     )}
                   </div>
                   {habit.description && <p className="text-sm text-muted-foreground mt-1">{habit.description}</p>}
-                  <div className="flex gap-1 mt-2">
+                  <div className="flex gap-1 mt-2" role="img" aria-label={`Last 7 days: ${weekLogs.map(({ date }) => (logs.some((l) => l.habitId === habit.id && l.date === date && l.completed) ? "done" : "missed")).join(", ")}`}>
                     {weekLogs.map(({ date, day }) => {
-                      const log = getHabitLogs().find((l) => l.habitId === habit.id && l.date === date);
+                      const log = logs.find((l) => l.habitId === habit.id && l.date === date);
                       return (
                         <div
                           key={date}
                           className={`w-8 h-8 rounded flex items-center justify-center text-xs ${
-                            log?.completed ? "bg-green-500 text-white" : "bg-muted"
+                            log?.completed ? "bg-success text-success-foreground" : "bg-muted"
                           }`}
                           title={`${day}: ${log?.completed ? "Done" : "Missed"}`}
                         >
@@ -193,20 +225,21 @@ export default function HabitsPage() {
                     })}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <button
                     title={todayCompleted ? "Uncheck today" : "Check today"}
+                    aria-pressed={todayCompleted}
                     onClick={() => toggleHabit(habit.id)}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                      todayCompleted ? "bg-green-500 text-white" : "border hover:bg-accent"
+                    className={`w-11 h-11 rounded-full flex items-center justify-center text-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      todayCompleted ? "bg-success text-success-foreground" : "border hover:bg-accent"
                     }`}
                   >
                     {todayCompleted ? "✓" : "+"}
                   </button>
-                  <button title="Edit habit" onClick={() => handleEdit(habit)} className="p-2 hover:bg-accent rounded-lg transition-colors">
+                  <button title="Edit habit" aria-label={`Edit ${habit.name}`} onClick={() => handleEdit(habit)} className="w-11 h-11 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     <Edit3 className="w-4 h-4" />
                   </button>
-                  <button title="Delete habit" onClick={() => { if (confirm(`Delete habit "${habit.name}" and its history?`)) { deleteHabit(habit.id); setHabits(getHabits()); } }} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-destructive">
+                  <button title="Delete habit" aria-label={`Delete ${habit.name}`} onClick={() => handleDeleteHabit(habit)} className="w-11 h-11 flex items-center justify-center hover:bg-destructive/10 rounded-lg transition-colors text-destructive-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -215,10 +248,10 @@ export default function HabitsPage() {
           );
         })}
 
-        {habits.length === 0 && !showForm && (
+        {habits.length === 0 && !showForm && isReady && (
           <Card className="p-8 text-center">
             <CheckCircle2 className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No habits yet. Add one to get started!</p>
+            <p className="text-muted-foreground">No habits yet. Pick one small thing you want to keep.</p>
           </Card>
         )}
       </div>

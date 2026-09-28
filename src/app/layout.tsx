@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PersonalTrack — Personal Journal, Habits & Goals",
+  title: "PersonalTrack: journal, habits, and goals",
   description: "Track your daily journal, habits, and goals locally in your browser",
 };
 

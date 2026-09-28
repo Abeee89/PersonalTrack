@@ -12,7 +12,7 @@ export default function StorageWarning() {
 
   if (!warning) return null;
   return (
-    <div role="alert" className="bg-amber-100 text-amber-900 text-sm px-4 py-2 text-center border-b border-amber-300">
+    <div role="alert" className="bg-secondary text-secondary-foreground text-sm px-4 py-2 text-center border-b border-border">
       {warning}
     </div>
   );
