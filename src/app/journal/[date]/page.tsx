@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { getJournalEntries, saveJournalEntry, deleteJournalEntry, StorageError } from "@/lib/db";
 import { JournalEntry } from "@/lib/types";
+import { isSafeImageSource } from "@/lib/photos";
 import { format, isValid, parseISO } from "date-fns";
 import {
   ArrowLeft,
@@ -148,6 +149,28 @@ export default function JournalDatePage() {
             className="mt-1"
           />
         </div>
+
+        {(() => {
+          const photos = (entries.find((e) => e.date === dateParam)?.photos || []).filter(isSafeImageSource);
+          if (photos.length === 0) return null;
+          return (
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Photos</label>
+              <div className="grid grid-cols-4 gap-2 mt-2">
+                {photos.map((src, i) => (
+                  // data-URL previews from localStorage; next/image cannot optimize these
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={i}
+                    src={src}
+                    alt={`Entry photo ${i + 1}`}
+                    className="w-full h-24 object-cover rounded-lg border border-border"
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </Card>
     </div>
   );

@@ -38,7 +38,7 @@ describe("isPhotoAcceptable", () => {
 
 describe("capPhotos", () => {
   it("drops unsafe entries and caps to max", () => {
-    const many = Array.from({ length: MAX_PHOTOS_PER_ENTRY + 5 }, (_, i) => VALID_PNG);
+    const many = new Array(MAX_PHOTOS_PER_ENTRY + 5).fill(VALID_PNG);
     const mixed = [SVG, VALID_PNG, "data:text/html;base64,AAAA", ...many];
     const result = capPhotos(mixed);
     expect(result.length).toBe(MAX_PHOTOS_PER_ENTRY);

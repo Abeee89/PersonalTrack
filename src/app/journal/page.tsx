@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { getJournalEntries, saveJournalEntry, deleteJournalEntry, StorageError } from "@/lib/db";
 import { JournalEntry } from "@/lib/types";
+import { isSafeImageSource, ALLOWED_IMAGE_MIME, MAX_PHOTO_BYTES } from "@/lib/photos";
 import { format, parseISO, subDays, addDays, isBefore, isAfter, startOfToday } from "date-fns";
 import {
   PenLine,
@@ -35,8 +36,18 @@ export default function JournalPage() {
   const earliest = format(subDays(startOfToday(), 365), "yyyy-MM-dd");
 
   useEffect(() => {
-    setEntries(getJournalEntries());
+    const all = getJournalEntries();
+    setEntries(all);
+    const initial = all.find((e) => e.date === today);
+    if (initial) {
+      setTitle(initial.title);
+      setContent(initial.content);
+      setMood(initial.mood);
+      setTags(initial.tags.join(", "));
+      setEditing(true);
+    }
     setIsReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadEntry = (date: string) => {
@@ -118,8 +129,8 @@ export default function JournalPage() {
     const limited: File[] = [];
     Array.from(files).forEach((file) => {
       if (currentCount + limited.length >= 10) return;
-      if (!file.type.startsWith("image/")) return;
-      if (file.size > 2 * 1024 * 1024) return;
+      if (!ALLOWED_IMAGE_MIME.includes(file.type)) return;
+      if (file.size > MAX_PHOTO_BYTES) return;
       limited.push(file);
     });
     if (limited.length === 0) {
@@ -139,10 +150,10 @@ export default function JournalPage() {
             const entry: JournalEntry = {
               id: existing?.id || crypto.randomUUID(),
               date: selectedDate,
-              title: existing?.title || "",
-              content: existing?.content || "",
-              mood: existing?.mood || 0,
-              tags: existing?.tags || [],
+              title,
+              content,
+              mood,
+              tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
               photos: nextPhotos.slice(0, 10),
               createdAt: existing?.createdAt || new Date().toISOString(),
               updatedAt: new Date().toISOString(),
@@ -268,6 +279,28 @@ export default function JournalPage() {
               />
             </div>
 
+            {(() => {
+              const photos = (entries.find((e) => e.date === selectedDate)?.photos || []).filter(isSafeImageSource);
+              if (photos.length === 0) return null;
+              return (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Photos</label>
+                  <div className="grid grid-cols-4 gap-2 mt-2">
+                    {photos.map((src, i) => (
+                      // data-URL previews from localStorage; next/image cannot optimize these
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={i}
+                        src={src}
+                        alt={`Entry photo ${i + 1}`}
+                        className="w-full h-20 object-cover rounded-lg border border-border"
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <input
@@ -276,7 +309,6 @@ export default function JournalPage() {
                   accept="image/png,image/jpeg,image/webp,image/gif"
                   multiple
                   className="hidden"
-                  disabled={!editing}
                   onChange={(e) => {
                     handleAddPhotos(e.target.files);
                     e.target.value = "";
@@ -287,7 +319,6 @@ export default function JournalPage() {
                   size="sm"
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={!editing}
                 >
                   <ImageIcon className="w-4 h-4 inline mr-1" /> Add Photos
                 </Button>

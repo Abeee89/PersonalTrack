@@ -1,4 +1,4 @@
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -17,4 +17,10 @@ export default defineConfig({
   projects: [
     { name: "chromium", testMatch: /.*\.spec\.ts/ },
   ],
+  webServer: {
+    command: "npm run dev -- -p 3100",
+    url: "http://localhost:3100",
+    reuseExistingServer: true,
+    timeout: 120_000,
+  },
 });
